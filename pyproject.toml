@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "ml-project"
+version = "0.1.0"
+description = "Natural Language Reasoning Application"
+authors = ["Dagmawi, Aven, Bereket, Raymond, Daniel"]
+license = "2022"
+readme = "README.md"
+packages = [{include = "models"}]
+
+
+[tool.poetry.scripts]
+modelTrain = ""
+modelTest = ""
+modelInfer = ""
+
+[tool.poetry.dependencies]
+python = "^3.10"
+torch = "1.13.1"
+tdqm = "0.0.1"
+numpy = "1.24.1"
+matplotlib = "3.6.2"
+
+
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
