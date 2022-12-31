@@ -44,7 +44,8 @@ def train(config: Dict[str, Dict],
     # Read config
     data_config = config["data"]
     trainer_config = config["trainer"]
-    # optimizer_config = config["optimizer"]
+    optimizer_config = config["optimizer"]
+    model_config = {};
 
     # Load data
     if data_config["task-id"]=="all":
