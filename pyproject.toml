@@ -9,9 +9,7 @@ packages = [{include = "models"}]
 
 
 [tool.poetry.scripts]
-modelTrain = ""
-modelTest = ""
-modelInfer = ""
+modelTrain = "main:train_model"
 
 [tool.poetry.dependencies]
 python = "^3.10"
