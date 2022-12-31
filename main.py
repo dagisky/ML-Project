@@ -18,8 +18,6 @@ import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 
 from babi.data_preprocess.preprocess import parse
-from baselines.sam import qamodel
-from baselines.sam.utils import WarmupScheduler
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +43,7 @@ def train(config: Dict[str, Dict],
 
     # Read config
     data_config = config["data"]
-    trainer_config = config["trainer"]
-    optimizer_config = config["optimizer"]
+    # optimizer_config = config["optimizer"]
 
     # Load data
     if data_config["task-id"]=="all":
@@ -233,7 +230,7 @@ def train(config: Dict[str, Dict],
     # writer.close()
 
 
-if __name__ == "__main__":
+def train_model():
     parser = ArgumentParser(description="Training script.")
     parser.add_argument("--config-file", type=str, metavar='PATH', default="./babi/configs/config_all.json",
                         help="Path to the model config file")
