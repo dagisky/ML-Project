@@ -5,5 +5,8 @@
   },
   "trainer":{
     "batch_size":24
+  },
+  "optimizer":{
+    
   }
 }
