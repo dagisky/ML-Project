@@ -2,5 +2,8 @@
   "data":{
     "data_path": "./babi/data/en-valid-10k",
     "task-id": "all"
+  },
+  "trainer":{
+    "batch_size":24
   }
 }
