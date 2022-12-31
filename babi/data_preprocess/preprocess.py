@@ -16,7 +16,7 @@ from functools import reduce
 
 FORMAT_STR = "qa{}_"
 PAD_ID = 0
-SPLIT_RE = re.compile('(\W+)?')
+SPLIT_RE = re.compile('(\W+)')
 
 
 def parse_all(data_path, task_ids, word2id=None, bsz=32, DATA_TYPES=['train', 'valid', 'test'], global_sentence_max=0,
@@ -91,6 +91,7 @@ def parse(data_path, task_id, word2id=None, bsz=32, DATA_TYPES=['train', 'valid'
         return vectorized_data + [vectorized_data[0][4]]
     else:
         for i, data_type in enumerate(DATA_TYPES):
+            print(i, data_type)
             print("vectorize {} ...".format(data_type))
             cache_dir = data_path + f"-pik{cache_dir_ext}/"
             if not os.path.exists(cache_dir):

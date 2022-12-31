@@ -43,6 +43,7 @@ def train(config: Dict[str, Dict],
 
     # Read config
     data_config = config["data"]
+    trainer_config = config["trainer"]
     # optimizer_config = config["optimizer"]
 
     # Load data
