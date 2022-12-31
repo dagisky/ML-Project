@@ -12,7 +12,7 @@ packages = [{include = "models"}]
 modelTrain = "main:train_model"
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "3.9.13"
 torch = "1.13.1"
 tdqm = "0.0.1"
 numpy = "1.24.1"
