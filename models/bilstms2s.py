@@ -1,4 +1,9 @@
-class Encoder(nn.Module):
+import math
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class Encoder(nn.Module): # Encodes the question
     def __init__(self, input_dim, emb_dim, enc_hid_dim, dec_hid_dim, dropout):
         super().__init__()
         
@@ -15,6 +20,7 @@ class Encoder(nn.Module):
         #src = [src len, batch size]
         
         embedded = self.dropout(self.embedding(src))
+        print(embedded.size())
         
         #embedded = [src len, batch size, emb dim]
         
@@ -146,14 +152,24 @@ class Decoder(nn.Module):
         return prediction, hidden.squeeze(0)
 
 class Seq2Seq(nn.Module):
-    def __init__(self, encoder, decoder, device):
+    def __init__(self, ctx_encoder, query_decoder, device):
         super().__init__()
         
-        self.encoder = encoder
-        self.decoder = decoder
+        self.ctx_encoder = ctx_encoder
+        self.query_decoder = query_decoder
         self.device = device
+
+    def attention(query, key, value, dropout=None):
+        "Compute 'Scaled Dot Product Attention'"
+        d_k = query.size(-1)
+        scores = torch.matmul(query, key.transpose(-2, -1)) \
+                 / math.sqrt(d_k)
+        p_attn = F.softmax(scores, dim = -1)
+        if dropout is not None:
+            p_attn = dropout(p_attn)
+        return torch.matmul(p_attn, value), p_attn
         
-    def forward(self, src, trg, teacher_forcing_ratio = 0.5):
+    def forward(self, src, query, teacher_forcing_ratio = 0.5):
         
         #src = [src len, batch size]
         #trg = [trg len, batch size]
@@ -161,44 +177,52 @@ class Seq2Seq(nn.Module):
         #e.g. if teacher_forcing_ratio is 0.75 we use teacher forcing 75% of the time
         
         batch_size = src.shape[1]
-        trg_len = trg.shape[0]
-        trg_vocab_size = self.decoder.output_dim
+        # trg_len = trg.shape[0]
+        # trg_vocab_size = self.decoder.output_dim
         
         #tensor to store decoder outputs
-        outputs = torch.zeros(trg_len, batch_size, trg_vocab_size).to(self.device)
+        # outputs = torch.zeros(trg_len, batch_size, trg_vocab_size).to(self.device)
         
         #encoder_outputs is all hidden states of the input sequence, back and forwards
         #hidden is the final forward and backward hidden states, passed through a linear layer
-        encoder_outputs, hidden = self.encoder(src)
+        encoder_outputs, hidden = self.ctx_encoder(src)
+        query_outputs, query_hidden = self.query_decoder(src)
+        print("------------dims-----------------")
+        print(encoder_outputs.size())
+        print(query_hidden.size())
+        result = self.attention(encoder_outputs, query_hidden, encoder_outputs)
+
+
                 
-        #first input to the decoder is the  tokens
-        input = trg[0,:]
+        # #first input to the decoder is the  tokens
+        # input = trg[0,:]
         
-        for t in range(1, trg_len):
+        # for t in range(1, trg_len):
             
-            #insert input token embedding, previous hidden state and all encoder hidden states
-            #receive output tensor (predictions) and new hidden state
-            output, hidden = self.decoder(input, hidden, encoder_outputs)
+        #     #insert input token embedding, previous hidden state and all encoder hidden states
+        #     #receive output tensor (predictions) and new hidden state
+        #     output, hidden = self.decoder(input, hidden, encoder_outputs)
             
-            #place predictions in a tensor holding predictions for each token
-            outputs[t] = output
+        #     #place predictions in a tensor holding predictions for each token
+        #     outputs[t] = output
             
-            #decide if we are going to use teacher forcing or not
-            teacher_force = random.random() < teacher_forcing_ratio
+        #     #decide if we are going to use teacher forcing or not
+        #     teacher_force = random.random() < teacher_forcing_ratio
             
-            #get the highest predicted token from our predictions
-            top1 = output.argmax(1) 
+        #     #get the highest predicted token from our predictions
+        #     top1 = output.argmax(1) 
             
-            #if teacher forcing, use actual next token as next input
-            #if not, use predicted token
-            input = trg[t] if teacher_force else top1
+        #     #if teacher forcing, use actual next token as next input
+        #     #if not, use predicted token
+        #     input = trg[t] if teacher_force else top1
 
-        return outputs
+        # return outputs
 
 
-def create_model():
-    INPUT_DIM = len(SRC.vocab)
-    OUTPUT_DIM = len(TRG.vocab)
+
+def create_model(vocab_size, device):
+    INPUT_DIM = vocab_size
+    OUTPUT_DIM = 1
     ENC_EMB_DIM = 256
     DEC_EMB_DIM = 256
     ENC_HID_DIM = 512
@@ -208,7 +232,7 @@ def create_model():
 
     attn = Attention(ENC_HID_DIM, DEC_HID_DIM)
     enc = Encoder(INPUT_DIM, ENC_EMB_DIM, ENC_HID_DIM, DEC_HID_DIM, ENC_DROPOUT)
-    dec = Decoder(OUTPUT_DIM, DEC_EMB_DIM, ENC_HID_DIM, DEC_HID_DIM, DEC_DROPOUT, attn)
+    dec = Encoder(INPUT_DIM, ENC_EMB_DIM, ENC_HID_DIM, DEC_HID_DIM, ENC_DROPOUT)
 
     model = Seq2Seq(enc, dec, device).to(device)
-    return model;
+    return model

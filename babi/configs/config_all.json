@@ -4,9 +4,15 @@
     "task-id": "all"
   },
   "trainer":{
-    "batch_size":24
+    "batch_size":24,
+    "epochs": 10
+  },
+  "model":{
+
   },
   "optimizer":{
-    
+    "lr": 0.02,
+    "beta1": 0.1,
+    "beta2": 0.2
   }
 }
