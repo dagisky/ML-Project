@@ -13,12 +13,12 @@ import numpy as np
 # from tensorboardX import SummaryWriter
 import random
 import torch
-import torch.optim as optim
 import torch.nn as nn
+import torch.optim as optim
+from models import bilstms2s as seq2seq
 from torch.utils.data import TensorDataset, DataLoader
 
 from babi.data_preprocess.preprocess import parse
-
 logger = logging.getLogger(__name__)
 
 
@@ -59,7 +59,7 @@ def train(config: Dict[str, Dict],
     test_data_loaders = {}
 
     num_train_batches = num_valid_batches = num_test_batches = 0
-    max_seq = 0
+    max_story_seq, max_query_seq = 0, 0
     for i in task_ids:
         train_raw_data, valid_raw_data, test_raw_data, word2id = parse(data_config["data_path"],
                                                                        str(i), word2id=word2id,
@@ -68,10 +68,9 @@ def train(config: Dict[str, Dict],
         valid_epoch_size = valid_raw_data[0].shape[0]
         test_epoch_size = test_raw_data[0].shape[0]
 
-        max_story_length = np.max(train_raw_data[1])
-        max_sentences = train_raw_data[0].shape[1]
-        max_seq = max(max_seq, train_raw_data[0].shape[2])
-        max_q = train_raw_data[0].shape[1]
+        max_story_seq = train_raw_data[0].shape[1]
+        max_query_seq = train_raw_data[2].shape[1]
+
         valid_batch_size = valid_epoch_size // 73  # like in the original implementation
         test_batch_size = test_epoch_size // 73
 
@@ -99,20 +98,17 @@ def train(config: Dict[str, Dict],
     print(f"voca size {len(word2id)}")
 
     model_config["vocab_size"] = len(word2id)
-    model_config["max_seq"] = max_seq
     model_config["symbol_size"] = 64
     # Create model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    # model = define model
-    # optimizer = optim.Adam(model.parameters(),
-    #                        lr=optimizer_config["lr"], betas=(optimizer_config["beta1"], optimizer_config["beta2"]))
-    # optimizer = Nadam(model.parameters(),
-    #                        lr=optimizer_config["lr"], betas=(optimizer_config["beta1"], optimizer_config["beta2"]))
+    model = seq2seq.create_model(model_config["vocab_size"], device)
+    # # model = define model
 
-    # optimizer = optim.RMSprop(model.parameters(), lr=1e-4, momentum=0.9)
 
-    # loss_fn = nn.CrossEntropyLoss(reduction='none')
-    # warm_up = optimizer_config.get("warm_up", False)
+    optimizer = optim.RMSprop(model.parameters(), lr=1e-4, momentum=0.9)
+
+    loss_fn = nn.CrossEntropyLoss(reduction='none')
+    warm_up = optimizer_config.get("warm_up", False)
 
     # scheduler = WarmupScheduler(optimizer=optimizer,
     #                             steps=optimizer_config["warm_up_steps"] if warm_up else 0,
@@ -121,71 +117,76 @@ def train(config: Dict[str, Dict],
     # decay_done = False
     # max_acc = 0
 
-    # with config_path.open("w") as fp:
-    #     json.dump(config, fp, indent=4)
-    # if eval_test:  # =================== testing and evalutaiton =====================
-    #     print(f"testing ... load {model_path.absolute()}")
-    #     model.load_state_dict(torch.load(model_path.absolute()))
-    #     # Evaluation on test data
-    #     model.eval()
-    #     correct = 0
-    #     test_loss = 0
-    #     with torch.no_grad():
-    #         total_test_samples = 0
-    #         single_task_acc = [0] * len(test_data_loaders)
-    #         for k, te in test_data_loaders.items():
-    #             test_data_loader = te
-    #             task_acc = 0
-    #             single_task_samples = 0
-    #             for story, story_length, query, answer in tqdm(test_data_loader):
-    #                 # logits = model(story.to(device), query.to(device))
-    #                 answer = answer.to(device)
-    #                 correct_batch = (torch.argmax(logits, dim=-1) == answer).sum()
-    #                 correct += correct_batch.item()
-    #                 task_acc += correct_batch.item()
-    #                 loss = loss_fn(logits, answer)
-    #                 test_loss += loss.sum().item()
-    #                 total_test_samples+=story.shape[0]
-    #                 single_task_samples+=story.shape[0]
-    #             print(f"validate acc task {k}: {task_acc/single_task_samples}")
-    #             single_task_acc[k - 1] = task_acc/single_task_samples
-    #         test_acc = correct / total_test_samples
-    #         test_loss = test_loss / total_test_samples
-    #     print(f"Test accuracy: {test_acc:.3f}, loss: {test_loss:.3f}")
-    #     print(f"test avg: {np.mean(single_task_acc)}")
-    #     raise True
+    with config_path.open("w") as fp:
+        json.dump(config, fp, indent=4)
+    if eval_test:  # =================== testing and evalutaiton =====================
+        print(f"testing ... load {model_path.absolute()}")
+        model.load_state_dict(torch.load(model_path.absolute()))
+        # Evaluation on test data
+        model.eval()
+        correct = 0
+        test_loss = 0
+        with torch.no_grad():
+            total_test_samples = 0
+            single_task_acc = [0] * len(test_data_loaders)
+            for k, te in test_data_loaders.items():
+                test_data_loader = te
+                task_acc = 0
+                single_task_samples = 0
+                for story, story_length, query, answer in tqdm(test_data_loader):
+                    logits = model(story.to(device), query.to(device))
+                    answer = answer.to(device)
+                    correct_batch = (torch.argmax(logits, dim=-1) == answer).sum()
+                    correct += correct_batch.item()
+                    task_acc += correct_batch.item()
+                    loss = loss_fn(logits, answer)
+                    test_loss += loss.sum().item()
+                    total_test_samples+=story.shape[0]
+                    single_task_samples+=story.shape[0]
+                print(f"validate acc task {k}: {task_acc/single_task_samples}")
+                single_task_acc[k - 1] = task_acc/single_task_samples
+            test_acc = correct / total_test_samples
+            test_loss = test_loss / total_test_samples
+        print(f"Test accuracy: {test_acc:.3f}, loss: {test_loss:.3f}")
+        print(f"test avg: {np.mean(single_task_acc)}")
+        raise True
 
-    # for i in range(trainer_config["epochs"]):
-    #     logging.info(f"##### EPOCH: {i} #####")
-    #     scheduler.step()
-    #     # Train
-    #     model.train()
-    #     correct = 0
-    #     train_loss = 0
-    #     for _ in tqdm(range(num_train_batches)):
-    #         loader_i = random.randint(0,len(train_data_loaders)-1)+1
-    #         try:
-    #             story, story_length, query, answer = next(train_data_loaders[loader_i][0])
-    #         except StopIteration:
-    #             train_data_loaders[loader_i][0] = iter(train_data_loaders[loader_i][1])
-    #             story, story_length, query, answer = next(train_data_loaders[loader_i][0])
-    #         optimizer.zero_grad()
-    #         # logits = model(story.to(device), query.to(device))
-    #         answer = answer.to(device)
-    #         correct_batch = (torch.argmax(logits, dim=-1) == answer).sum()
-    #         correct += correct_batch.item()
+    for i in range(trainer_config["epochs"]):
+        logging.info(f"##### EPOCH: {i} #####")
+        # Train
+        model.train()
+        correct = 0
+        train_loss = 0
+        for _ in tqdm(range(num_train_batches)):
+            loader_i = random.randint(0,len(train_data_loaders)-1)+1
+            try:
+                story, story_length, query, answer = next(train_data_loaders[loader_i][0])
+            except StopIteration:
+                train_data_loaders[loader_i][0] = iter(train_data_loaders[loader_i][1])
+                story, story_length, query, answer = next(train_data_loaders[loader_i][0])
 
-    #         loss = loss_fn(logits, answer)
-    #         train_loss += loss.sum().item()
-    #         loss = loss.mean()
-    #         loss.backward()
-    #         nn.utils.clip_grad_norm_(model.parameters(), optimizer_config["max_gradient_norm"])
-    #         # nn.utils.clip_grad_value_(model.parameters(), 10)
+            print("============size of the story============")
+            print(story.size())
+            print("==========size of the query=============")
+            print(query.size())
 
-    #         optimizer.step()
+            optimizer.zero_grad()
+            logits = model(story.to(device), query.to(device))
+            answer = answer.to(device)
+            correct_batch = (torch.argmax(logits, dim=-1) == answer).sum()
+            correct += correct_batch.item()
 
-    #     train_acc = correct / (num_train_batches*trainer_config["batch_size"])
-    #     train_loss = train_loss / (num_train_batches*trainer_config["batch_size"])
+            loss = loss_fn(logits, answer)
+            train_loss += loss.sum().item()
+            loss = loss.mean()
+            loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), optimizer_config["max_gradient_norm"])
+            # nn.utils.clip_grad_value_(model.parameters(), 10)
+
+            optimizer.step()
+
+        train_acc = correct / (num_train_batches*trainer_config["batch_size"])
+        train_loss = train_loss / (num_train_batches*trainer_config["batch_size"])
 
     #     # Validation
     #     # model.eval()
@@ -250,3 +251,6 @@ def train_model():
         config = json.load(fp)
 
     train(config, args.serialization_path, args.eval_test)
+
+if __name__ == "__main__":
+    train_model()

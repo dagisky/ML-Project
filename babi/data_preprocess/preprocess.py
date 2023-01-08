@@ -1,12 +1,3 @@
-"""
-bAbI task reader from https://github.com/siddk/entity-network
-adapted for python3 and other needs.
-
-reader.py
-
-Core script containing preprocessing logic - reads bAbI Task Story, and returns
-vectorized forms of the stories, questions, and answers.
-"""
 import numpy as np
 import os
 import pickle
@@ -19,9 +10,8 @@ PAD_ID = 0
 SPLIT_RE = re.compile('(\W+)')
 
 
-def parse_all(data_path, task_ids, word2id=None, bsz=32, DATA_TYPES=['train', 'valid', 'test'], global_sentence_max=0,
-          use_cache=True):
-    vectorized_data, story_data, global_story_max = [], [], 0
+def parse_all(data_path, task_ids, word2id=None, bsz=32, DATA_TYPES=['train', 'valid', 'test'], use_cache=True):
+    vectorized_data, story_data, global_story_max, global_query_max = [], [], 0, 0
     for data_type in DATA_TYPES:
         print("read {} ...".format(data_type))
         cache_path = data_path + "-pik/" + FORMAT_STR.format("all") + data_type + ".pik"
@@ -39,13 +29,12 @@ def parse_all(data_path, task_ids, word2id=None, bsz=32, DATA_TYPES=['train', 'v
                     print("filename not found for in listdir for {} and {}".format(task_id, data_type))
                     print("skipping ... ")
                     continue
-                stories, sentence_max, story_max, word2id = parse_stories(os.path.join(data_path, filenames[0]), word2id)
+                stories, story_max, query_max, word2id = parse_stories(os.path.join(data_path, filenames[0]), word2id)
                 astories.extend(stories)
-                global_sentence_max = max(global_sentence_max, sentence_max)
+                global_query_max = max(global_query_max, query_max)
                 global_story_max = max(global_story_max, story_max)
             print(f"{data_type} len: {len(astories)}")
             story_data.append(astories)
-
 
     if vectorized_data:
         return vectorized_data + [vectorized_data[0][4]]
@@ -57,17 +46,16 @@ def parse_all(data_path, task_ids, word2id=None, bsz=32, DATA_TYPES=['train', 'v
             if not os.path.exists(cache_dir):
                 os.mkdir(cache_dir)
             cache_path = cache_dir + FORMAT_STR.format("all") + data_type + ".pik"
-            S, S_len, Q, A = vectorize_stories(story_data[i], global_sentence_max, global_story_max, word2id, -1)
+            S, S_len, Q, A = vectorize_stories(story_data[i], global_story_max, global_query_max, word2id, -1)
             n = int((S.shape[0] / bsz) * bsz)
             with open(cache_path, 'wb') as f:
                 pickle.dump((S[:n], S_len[:n], Q[:n], A[:n], word2id), f)
             vectorized_data.append((S[:n], S_len[:n], Q[:n], A[:n], word2id))
         return vectorized_data + [word2id]
 
-def parse(data_path, task_id, word2id=None, bsz=32, DATA_TYPES=['train', 'valid', 'test'], global_sentence_max=0,
-          use_cache=True, cache_dir_ext=""):
+def parse(data_path, task_id, word2id=None, bsz=32, DATA_TYPES=['train', 'valid', 'test'], use_cache=True, cache_dir_ext=""):
 
-    vectorized_data, story_data, global_story_max = [], [], 0
+    vectorized_data, story_data, global_story_max, global_query_max = [], [], 0, 0
     for data_type in DATA_TYPES:
         print("read {} ...".format(data_type))
         cache_path = data_path + f"-pik{cache_dir_ext}/" + FORMAT_STR.format(task_id) + data_type + ".pik"
@@ -82,11 +70,10 @@ def parse(data_path, task_id, word2id=None, bsz=32, DATA_TYPES=['train', 'valid'
                 print("filename not found for in listdir for {} and {}".format(task_id, data_type))
                 print("skipping ... ")
                 continue
-            stories, sentence_max, story_max, word2id = parse_stories(os.path.join(data_path, filenames[0]), word2id)
+            stories, story_max, query_max, word2id = parse_stories(os.path.join(data_path, filenames[0]), word2id)
             story_data.append(stories)
-            global_sentence_max = max(global_sentence_max, sentence_max)
+            global_query_max = max(global_query_max, query_max)
             global_story_max = max(global_story_max, story_max)
-
     if vectorized_data:
         return vectorized_data + [vectorized_data[0][4]]
     else:
@@ -97,7 +84,7 @@ def parse(data_path, task_id, word2id=None, bsz=32, DATA_TYPES=['train', 'valid'
             if not os.path.exists(cache_dir):
                 os.mkdir(cache_dir)
             cache_path = cache_dir + FORMAT_STR.format(task_id) + data_type + ".pik"
-            S, S_len, Q, A = vectorize_stories(story_data[i], global_sentence_max, global_story_max, word2id, task_id)
+            S, S_len, Q, A = vectorize_stories(story_data[i], global_story_max, global_query_max, word2id, task_id)
             n = int((S.shape[0] / bsz) * bsz)
             with open(cache_path, 'wb') as f:
                 pickle.dump((S[:n], S_len[:n], Q[:n], A[:n], word2id), f)
@@ -127,18 +114,12 @@ def parse_stories(filename, word2id=None):
             story.append('')
         else:
             sentence = tokenize(line)
-            story.append(sentence)
-    print(filename)
-    if '19' in filename:
-        print('ssss')
+            story.extend(sentence)
     # Build Vocabulary
     print("build vocab")
     if not word2id:
         vocab = set(reduce(lambda x, y: x + y, [q for (_, q, _) in stories]))
-        print("reduce done!")
-        for (s, _, _) in stories:
-            for sentence in s:
-                vocab.update(sentence)
+        vocab.update(set(reduce(lambda x, y: x + y, [s for (s, _, _) in stories])))
         for (_, _, a) in stories:
             vocab.add(a)
         id2word = ['PAD_ID'] + list(vocab)
@@ -146,9 +127,7 @@ def parse_stories(filename, word2id=None):
     else:
         vocab = set(reduce(lambda x, y: x + y, [q for (_, q, _) in stories]))
         print("reduce done!")
-        for (s, _, _) in stories:
-            for sentence in s:
-                vocab.update(sentence)
+        vocab.update(set(reduce(lambda x, y: x + y, [s for (s, _, _) in stories])))
         for (_, _, a) in stories:
             vocab.add(a)
         id2word = ['PAD_ID'] + list(vocab)
@@ -157,43 +136,35 @@ def parse_stories(filename, word2id=None):
                 word2id[v] = len(word2id)
     # Get Maximum Lengths
     print("get max lengths")
-    sentence_max, story_max = 0, 0
+    story_max, query_max = 0, 0
     for (s, q, _) in stories:
-        if len(q) > sentence_max:
-            sentence_max = len(q)
-        if len(s) > story_max:
-            story_max = len(s)
-        for sentence in s:
-            if len(sentence) > sentence_max:
-                sentence_max = len(sentence)
+        query_max = len(q) if len(q) > query_max else query_max
+        story_max = len(s) if len(s) > story_max else story_max
 
-    return stories, sentence_max, story_max, word2id
+    return stories, story_max, query_max, word2id
 
 
-def vectorize_stories(stories, sentence_max, story_max, word2id, task_id):
+def vectorize_stories(stories, story_max, query_max, word2id, task_id):
     # Check Story Max
     if task_id == 3 or int(task_id)<0:
-        story_max = min(story_max, 130)
+        story_max = min(story_max, 650)
     else:
-        story_max = min(story_max, 70)
+        story_max = min(story_max, 350)
 
     # Allocate Arrays
-    S = np.zeros([len(stories), story_max, sentence_max], dtype=np.int32)
-    Q = np.zeros([len(stories), sentence_max], dtype=np.int32)
+    S = np.zeros([len(stories), story_max], dtype=np.int32)
+    Q = np.zeros([len(stories), query_max], dtype=np.int32)
     S_len, A = np.zeros([len(stories)], dtype=np.int32), np.zeros([len(stories)], dtype=np.int32)
-
     # Fill Arrays
     for i, (s, q, a) in enumerate(stories):
         # Check S Length => All but Task 3 are limited to 70 sentences
         if task_id == 3 or int(task_id)<0:
-            s = s[-130:]
+            s = s[-650:]
         else:
-            s = s[-70:]
-
+            s = s[-350:]
         # Populate story
         for j in range(len(s)):
-            for k in range(len(s[j])):
-                S[i][j][k] = word2id[s[j][k]]
+            S[i][j] = word2id[s[j]]
 
         # Populate story length
         S_len[i] = len(s)
