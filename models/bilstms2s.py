@@ -186,9 +186,11 @@ class Seq2Seq(nn.Module):
         #encoder_outputs is all hidden states of the input sequence, back and forwards
         #hidden is the final forward and backward hidden states, passed through a linear layer
         encoder_outputs, hidden = self.ctx_encoder(src)
-        query_outputs, query_hidden = self.query_decoder(src)
+        query_outputs, query_hidden = self.query_decoder(query)
         print("------------dims-----------------")
         print(encoder_outputs.size())
+        print(hidden.size())
+        print(query_outputs.size())
         print(query_hidden.size())
         result = self.attention(encoder_outputs, query_hidden, encoder_outputs)
 

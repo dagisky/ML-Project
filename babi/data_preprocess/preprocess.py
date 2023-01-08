@@ -1,12 +1,3 @@
-"""
-bAbI task reader from https://github.com/siddk/entity-network
-adapted for python3 and other needs.
-
-reader.py
-
-Core script containing preprocessing logic - reads bAbI Task Story, and returns
-vectorized forms of the stories, questions, and answers.
-"""
 import numpy as np
 import os
 import pickle
@@ -129,11 +120,6 @@ def parse_stories(filename, word2id=None):
     if not word2id:
         vocab = set(reduce(lambda x, y: x + y, [q for (_, q, _) in stories]))
         vocab.update(set(reduce(lambda x, y: x + y, [s for (s, _, _) in stories])))
-        vocab.update(set(reduce(lambda x, y: x + y, [q for (_, q, _) in stories])))
-        print("reduce done!")
-        # for (s, _, _) in stories:
-        #     for word in s:
-        #         vocab.update(word)
         for (_, _, a) in stories:
             vocab.add(a)
         id2word = ['PAD_ID'] + list(vocab)
@@ -141,9 +127,7 @@ def parse_stories(filename, word2id=None):
     else:
         vocab = set(reduce(lambda x, y: x + y, [q for (_, q, _) in stories]))
         print("reduce done!")
-        for (s, _, _) in stories:
-            for word in s:
-                vocab.update(word)
+        vocab.update(set(reduce(lambda x, y: x + y, [s for (s, _, _) in stories])))
         for (_, _, a) in stories:
             vocab.add(a)
         id2word = ['PAD_ID'] + list(vocab)

@@ -19,7 +19,6 @@ from models import bilstms2s as seq2seq
 from torch.utils.data import TensorDataset, DataLoader
 
 from babi.data_preprocess.preprocess import parse
-
 logger = logging.getLogger(__name__)
 
 
@@ -99,7 +98,6 @@ def train(config: Dict[str, Dict],
     print(f"voca size {len(word2id)}")
 
     model_config["vocab_size"] = len(word2id)
-    model_config["max_seq"] = max_seq
     model_config["symbol_size"] = 64
     # Create model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
