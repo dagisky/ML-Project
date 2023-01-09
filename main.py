@@ -100,7 +100,9 @@ def train(config: Dict[str, Dict],
     model_config["vocab_size"] = len(word2id)
     model_config["symbol_size"] = 64
     # Create model
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = 'cuda'#torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print("==========Device==========")
+    print(device)
     model = seq2seq.create_model(model_config["vocab_size"], device)
     # # model = define model
 
@@ -165,10 +167,6 @@ def train(config: Dict[str, Dict],
                 train_data_loaders[loader_i][0] = iter(train_data_loaders[loader_i][1])
                 story, story_length, query, answer = next(train_data_loaders[loader_i][0])
 
-            print("============size of the story============")
-            print(story.size())
-            print("==========size of the query=============")
-            print(query.size())
 
             optimizer.zero_grad()
             logits = model(story.to(device), query.to(device))
@@ -180,7 +178,7 @@ def train(config: Dict[str, Dict],
             train_loss += loss.sum().item()
             loss = loss.mean()
             loss.backward()
-            nn.utils.clip_grad_norm_(model.parameters(), optimizer_config["max_gradient_norm"])
+            # nn.utils.clip_grad_norm_(model.parameters(), optimizer_config["max_gradient_norm"])
             # nn.utils.clip_grad_value_(model.parameters(), 10)
 
             optimizer.step()
@@ -188,44 +186,41 @@ def train(config: Dict[str, Dict],
         train_acc = correct / (num_train_batches*trainer_config["batch_size"])
         train_loss = train_loss / (num_train_batches*trainer_config["batch_size"])
 
-    #     # Validation
-    #     # model.eval()
-    #     correct = 0
-    #     valid_loss = 0
-    #     with torch.no_grad():
-    #         total_valid_samples = 0
-    #         for  k, va in valid_data_loaders.items():
-    #             valid_data_loader = va
-    #             task_acc = 0
-    #             single_valid_samples = 0
-    #             for story, story_length, query, answer in valid_data_loader:
-    #                 # logits = model(story.to(device), query.to(device))
-    #                 answer = answer.to(device)
-    #                 correct_batch = (torch.argmax(logits, dim=-1) == answer).sum()
-    #                 correct += correct_batch.item()
-    #                 loss = loss_fn(logits, answer)
-    #                 valid_loss += loss.sum().item()
-    #                 task_acc += correct_batch.item()
-    #                 total_valid_samples+= story.shape[0]
-    #                 single_valid_samples+= story.shape[0]
-    #             print(f"validate acc task {k}: {task_acc/single_valid_samples}")
-    #         valid_acc = correct / total_valid_samples
-    #         valid_loss = valid_loss / total_valid_samples
-    #         if valid_acc>max_acc:
-    #             print(f"saved model...{model_path}")
-    #             torch.save(model.state_dict(), model_path.absolute())
-    #             max_acc = valid_acc
+        # Validation
+        # model.eval()
+        correct = 0
+        valid_loss = 0
+        with torch.no_grad():
+            total_valid_samples = 0
+            for  k, va in valid_data_loaders.items():
+                valid_data_loader = va
+                task_acc = 0
+                single_valid_samples = 0
+                for story, story_length, query, answer in valid_data_loader:
+                    # logits = model(story.to(device), query.to(device))
+                    answer = answer.to(device)
+                    correct_batch = (torch.argmax(logits, dim=-1) == answer).sum()
+                    correct += correct_batch.item()
+                    loss = loss_fn(logits, answer)
+                    valid_loss += loss.sum().item()
+                    task_acc += correct_batch.item()
+                    total_valid_samples+= story.shape[0]
+                    single_valid_samples+= story.shape[0]
+                print(f"validate acc task {k}: {task_acc/single_valid_samples}")
+            valid_acc = correct / total_valid_samples
+            valid_loss = valid_loss / total_valid_samples
+            if valid_acc>max_acc:
+                print(f"saved model...{model_path}")
+                torch.save(model.state_dict(), model_path.absolute())
+                max_acc = valid_acc
 
-    #     writer.add_scalars("accuracy", {"train": train_acc,
-    #                                     "validation": valid_acc}, i)
-    #     writer.add_scalars("loss", {"train": train_loss,
-    #                                 "validation": valid_loss}, i)
+        # writer.add_scalars("accuracy", {"train": train_acc,
+        #                                 "validation": valid_acc}, i)
+        # writer.add_scalars("loss", {"train": train_loss,
+        #                             "validation": valid_loss}, i)
 
-    #     logging.info(f"\nTrain accuracy: {train_acc:.3f}, loss: {train_loss:.3f}"
-    #                  f"\nValid accuracy: {valid_acc:.3f}, loss: {valid_loss:.3f}")
-    #     if optimizer_config.get("decay", False) and valid_loss < optimizer_config["decay_thr"] and not decay_done:
-    #         scheduler.decay_lr(optimizer_config["decay_factor"])
-    #         decay_done = True
+        logging.info(f"\nTrain accuracy: {train_acc:.3f}, loss: {train_loss:.3f}"
+                     f"\nValid accuracy: {valid_acc:.3f}, loss: {valid_loss:.3f}")
 
 
 
@@ -241,7 +236,7 @@ def train_model():
                         help="Serialization directory path")
     parser.add_argument("--eval-test", default=False, action='store_true',
                         help="Whether to eval model on test dataset after training (default: False)")
-    parser.add_argument("--logging-level", type=str, metavar='LEVEL', default=20, choices=range(10, 51, 10),
+    parser.add_argument("--logging-level", type=str, metavar='LEVEL', default=5, choices=range(10, 51, 10),
                         help="Logging level (default: 20)")
     args = parser.parse_args()
 
