@@ -10,7 +10,7 @@ import shutil
 from tqdm import tqdm
 from typing import Dict
 import numpy as np
-# from tensorboardX import SummaryWriter
+from tensorboardX import SummaryWriter
 import random
 import torch
 import torch.nn as nn
@@ -39,7 +39,7 @@ def train(config: Dict[str, Dict],
         dir_path.mkdir(parents=True, exist_ok=False)
     model_path = dir_path / "model.pt"
     config_path = dir_path / "config.json"
-    # writer = SummaryWriter(log_dir=str(dir_path))
+    writer = SummaryWriter(log_dir=str(dir_path))
 
     # Read config
     data_config = config["data"]
@@ -117,7 +117,7 @@ def train(config: Dict[str, Dict],
     #                             multiplier=optimizer_config["warm_up_factor"] if warm_up else 1)
 
     # decay_done = False
-    # max_acc = 0
+    max_acc = 0
 
     with config_path.open("w") as fp:
         json.dump(config, fp, indent=4)
@@ -197,7 +197,7 @@ def train(config: Dict[str, Dict],
                 task_acc = 0
                 single_valid_samples = 0
                 for story, story_length, query, answer in valid_data_loader:
-                    # logits = model(story.to(device), query.to(device))
+                    logits = model(story.to(device), query.to(device))
                     answer = answer.to(device)
                     correct_batch = (torch.argmax(logits, dim=-1) == answer).sum()
                     correct += correct_batch.item()
@@ -214,10 +214,10 @@ def train(config: Dict[str, Dict],
                 torch.save(model.state_dict(), model_path.absolute())
                 max_acc = valid_acc
 
-        # writer.add_scalars("accuracy", {"train": train_acc,
-        #                                 "validation": valid_acc}, i)
-        # writer.add_scalars("loss", {"train": train_loss,
-        #                             "validation": valid_loss}, i)
+        writer.add_scalars("accuracy", {"train": train_acc,
+                                        "validation": valid_acc}, i)
+        writer.add_scalars("loss", {"train": train_loss,
+                                    "validation": valid_loss}, i)
 
         logging.info(f"\nTrain accuracy: {train_acc:.3f}, loss: {train_loss:.3f}"
                      f"\nValid accuracy: {valid_acc:.3f}, loss: {valid_loss:.3f}")
@@ -225,7 +225,7 @@ def train(config: Dict[str, Dict],
 
 
 
-    # writer.close()
+    writer.close()
 
 
 def train_model():
