@@ -5,13 +5,13 @@
   },
   "trainer":{
     "batch_size":24,
-    "epochs": 10
+    "epochs": 100
   },
   "model":{
 
   },
   "optimizer":{
-    "lr": 0.02,
+    "lr": 0.05,
     "beta1": 0.1,
     "beta2": 0.2
   }

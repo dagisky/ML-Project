@@ -12,7 +12,7 @@ class Encoder(nn.Module): # Encodes the question
         self.rnn = nn.GRU(emb_dim, enc_hid_dim, bidirectional = True)
         
         self.fc = nn.Linear(enc_hid_dim * 2, dec_hid_dim)
-        
+
         self.dropout = nn.Dropout(dropout)
         
     def forward(self, src):
@@ -35,7 +35,12 @@ class Attention(nn.Module):
     def __init__(self, enc_hid_dim, dec_hid_dim):
         super().__init__()
 
-        self.attn = nn.Linear((enc_hid_dim * 2) + (dec_hid_dim * 2), dec_hid_dim)
+        # self.attn = nn.Linear((enc_hid_dim * 2) + (dec_hid_dim * 2), dec_hid_dim*2)
+        self.attn_mlp = self.layers = nn.Sequential(
+            nn.Linear((enc_hid_dim * 2) + (dec_hid_dim * 2), dec_hid_dim * 2),
+            nn.ReLU(),
+            nn.Linear(dec_hid_dim * 2, dec_hid_dim * 2)
+        )
         self.v = nn.Linear(dec_hid_dim, 1, bias = False)
 
     def forward(self, hidden, encoder_outputs):
@@ -53,15 +58,15 @@ class Attention(nn.Module):
         #hidden = [batch size, src len, dec hid dim]
         #encoder_outputs = [batch size, src len, enc hid dim * 2]
 
-        energy = self.attn(torch.cat((hidden, encoder_outputs), dim = 2)) # (1, 86, 1024)
+        energy = self.attn_mlp(torch.cat((hidden, encoder_outputs), dim = 2)) # (1, 86, 1024)
 
         #energy = [batch size, src len, dec hid dim]
 
-        attention = self.v(energy).squeeze(2)
+        # attention = self.v(energy).squeeze(2)
 
         #attention= [batch size, src len]
 
-        return F.softmax(attention, dim=1)
+        return F.softmax(energy, dim=1)
 
 class Decoder(nn.Module):
     def __init__(self, input_dim, emb_dim, enc_hid_dim, dec_hid_dim, dropout, attention):
@@ -72,7 +77,14 @@ class Decoder(nn.Module):
         self.embedding = nn.Embedding(input_dim, emb_dim)
         self.rnn = nn.GRU(emb_dim, dec_hid_dim, bidirectional = True)
 
-        self.fc_out = nn.Linear(enc_hid_dim * 4, input_dim)
+        # self.fc_out = nn.Linear((enc_hid_dim * 2)**2, input_dim)
+        self.fc_out = self.layers = nn.Sequential(
+            nn.Linear(enc_hid_dim * 2, enc_hid_dim * 2),
+            nn.ReLU(),
+            nn.Linear(enc_hid_dim * 2, enc_hid_dim * 2),
+            nn.ReLU(),
+            nn.Linear(enc_hid_dim * 2, input_dim)
+        )
 
         self.dropout = nn.Dropout(dropout)
 
@@ -85,11 +97,12 @@ class Decoder(nn.Module):
 
         a = self.attention(encoder_hidden, outputs)
 
-        a = a.unsqueeze(1)
-        weighted = torch.bmm(a, outputs)
+        # a = a.unsqueeze(1)
+        weighted = torch.bmm(a.transpose(1,2), outputs)
 
 
-        weighted = torch.cat((weighted, encoder_outputs[:,-1,:].unsqueeze(1)), dim=-1)
+        # weighted = torch.cat((weighted, encoder_outputs[:,-1,:].unsqueeze(1)), dim=-1)
+        weighted = torch.bmm(encoder_outputs[:,-1,:].unsqueeze(1), weighted)
         prediction = self.fc_out(weighted.squeeze())
         return prediction
 
