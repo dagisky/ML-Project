@@ -24,7 +24,7 @@ class Encoder(nn.Module): # Encodes the question
         #embedded = [src len, batch size, emb dim]
         
         outputs, hidden = self.rnn(embedded)
-        hidden = torch.tanh(self.fc(torch.cat((hidden[-2,:,:], hidden[-1,:,:]), dim = 1)))
+        hidden = torch.tanh(self.fc(torch.cat((hidden[:,-2,:], hidden[:,-1,:]), dim = 1)))
         
         #outputs = [src len, batch size, enc hid dim * 2]
         #hidden = [batch size, dec hid dim]
@@ -72,7 +72,7 @@ class Decoder(nn.Module):
         self.embedding = nn.Embedding(input_dim, emb_dim)
         self.rnn = nn.GRU(emb_dim, dec_hid_dim, bidirectional = True)
 
-        self.fc_out = nn.Linear(enc_hid_dim * 2, input_dim)
+        self.fc_out = nn.Linear(enc_hid_dim * 4, input_dim)
 
         self.dropout = nn.Dropout(dropout)
 
@@ -83,13 +83,13 @@ class Decoder(nn.Module):
 
         #embedded = [1, batch size, emb dim]
 
-        a = self.attention(hidden[:, -1, :], encoder_outputs)
+        a = self.attention(encoder_hidden, outputs)
 
         a = a.unsqueeze(1)
-        weighted = torch.bmm(a, encoder_outputs)
+        weighted = torch.bmm(a, outputs)
 
-        weighted = weighted.permute(1, 0, 2)
 
+        weighted = torch.cat((weighted, encoder_outputs[:,-1,:].unsqueeze(1)), dim=-1)
         prediction = self.fc_out(weighted.squeeze())
         return prediction
 
@@ -102,8 +102,8 @@ class Seq2Seq(nn.Module):
         self.device = device
         
     def forward(self, src, query, teacher_forcing_ratio = 0.5):
-        encoder_outputs, hidden = self.ctx_encoder(src)
-        predictions = self.query_decoder(query, hidden, encoder_outputs)
+        encoder_outputs, hidden = self.ctx_encoder(query)
+        predictions = self.query_decoder(src, hidden, encoder_outputs)
         return F.softmax(predictions, dim = -1)
 
 

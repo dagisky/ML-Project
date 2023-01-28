@@ -100,7 +100,7 @@ def train(config: Dict[str, Dict],
     model_config["vocab_size"] = len(word2id)
     model_config["symbol_size"] = 64
     # Create model
-    device = 'cuda'#torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print("==========Device==========")
     print(device)
     model = seq2seq.create_model(model_config["vocab_size"], device)
