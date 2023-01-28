@@ -24,7 +24,7 @@ class Encoder(nn.Module): # Encodes the question
         #embedded = [src len, batch size, emb dim]
         
         outputs, hidden = self.rnn(embedded)
-        hidden = torch.tanh(self.fc(torch.cat((hidden[:,-2,:], hidden[:,-1,:]), dim = 1)))
+        hidden = self.fc(torch.cat((hidden[:,-2,:], hidden[:,-1,:]), dim = 1))
         
         #outputs = [src len, batch size, enc hid dim * 2]
         #hidden = [batch size, dec hid dim]
@@ -53,7 +53,7 @@ class Attention(nn.Module):
         #hidden = [batch size, src len, dec hid dim]
         #encoder_outputs = [batch size, src len, enc hid dim * 2]
 
-        energy = torch.tanh(self.attn(torch.cat((hidden, encoder_outputs), dim = 2))) # (1, 86, 1024)
+        energy = self.attn(torch.cat((hidden, encoder_outputs), dim = 2)) # (1, 86, 1024)
 
         #energy = [batch size, src len, dec hid dim]
 
