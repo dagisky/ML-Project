@@ -2,71 +2,73 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
 
-class Encoder(nn.Module): # Encodes the question
+
+class Encoder(nn.Module):  # Encodes the question
     def __init__(self, input_dim, emb_dim, enc_hid_dim, dec_hid_dim, dropout):
         super().__init__()
-        
+
         self.embedding = nn.Embedding(input_dim, emb_dim)
-        
-        self.rnn = nn.GRU(emb_dim, enc_hid_dim, bidirectional = True)
-        
+
+        self.rnn = nn.GRU(emb_dim, enc_hid_dim, bidirectional=True)
+
         self.fc = nn.Linear(enc_hid_dim * 2, dec_hid_dim)
 
         self.dropout = nn.Dropout(dropout)
-        
+
     def forward(self, src):
-        
-        #src = [src len, batch size]
-        
+        # src = [src len, batch size]
+
         embedded = self.dropout(self.embedding(src))
-        
-        #embedded = [src len, batch size, emb dim]
-        
+
+        # embedded = [src len, batch size, emb dim]
+
         outputs, hidden = self.rnn(embedded)
-        hidden = self.fc(torch.cat((hidden[:,-2,:], hidden[:,-1,:]), dim = 1))
-        
-        #outputs = [src len, batch size, enc hid dim * 2]
-        #hidden = [batch size, dec hid dim]
-        
+        hidden = torch.tanh(self.fc(torch.cat((hidden[:, -2, :], hidden[:, -1, :]), dim=1)))
+
+        # outputs = [src len, batch size, enc hid dim * 2]
+        # hidden = [batch size, dec hid dim]
+
         return outputs, hidden
+
 
 class Attention(nn.Module):
     def __init__(self, enc_hid_dim, dec_hid_dim):
         super().__init__()
 
-        # self.attn = nn.Linear((enc_hid_dim * 2) + (dec_hid_dim * 2), dec_hid_dim*2)
+        # self.attn = nn.Linear((enc_hid_dim * 2) + (dec_hid_dim * 2), dec_hid_dim)
         self.attn_mlp = self.layers = nn.Sequential(
             nn.Linear((enc_hid_dim * 2) + (dec_hid_dim * 2), dec_hid_dim * 2),
             nn.ReLU(),
-            nn.Linear(dec_hid_dim * 2, dec_hid_dim * 2)
+            nn.Linear(dec_hid_dim * 2, dec_hid_dim)
         )
-        self.v = nn.Linear(dec_hid_dim, 1, bias = False)
+        self.v = nn.Linear(dec_hid_dim, 1, bias=False)
 
     def forward(self, hidden, encoder_outputs):
-
-        #hidden = [batch size, dec hid dim]
-        #encoder_outputs = [src len, batch size, enc hid dim * 2]
+        # hidden = [batch size, dec hid dim]
+        # encoder_outputs = [src len, batch size, enc hid dim * 2]
 
         batch_size = encoder_outputs.shape[0]
         src_len = encoder_outputs.shape[1]
 
-        #repeat decoder hidden state src_len times
+        # repeat decoder hidden state src_len times
         hidden = hidden.unsqueeze(0).flatten(1, 2)
         hidden = hidden.unsqueeze(1).repeat(batch_size, src_len, 1)
 
-        #hidden = [batch size, src len, dec hid dim]
-        #encoder_outputs = [batch size, src len, enc hid dim * 2]
+        # hidden = [batch size, src len, dec hid dim]
+        # encoder_outputs = [batch size, src len, enc hid dim * 2]
 
-        energy = self.attn_mlp(torch.cat((hidden, encoder_outputs), dim = 2)) # (1, 86, 1024)
+        energy = torch.tanh(self.attn_mlp(torch.cat((hidden, encoder_outputs), dim=2)))  # (1, 86, 1024)
 
-        #energy = [batch size, src len, dec hid dim]
+        # energy = [batch size, src len, dec hid dim]
 
-        # attention = self.v(energy).squeeze(2)
+        attention = self.v(energy).squeeze(2)
 
-        #attention= [batch size, src len]
+        # attention= [batch size, src len]
 
-        return F.softmax(energy, dim=1)
+        return F.softmax(attention, dim=1)
+
 
 class Decoder(nn.Module):
     def __init__(self, input_dim, emb_dim, enc_hid_dim, dec_hid_dim, dropout, attention):
@@ -75,15 +77,16 @@ class Decoder(nn.Module):
         self.attention = attention
 
         self.embedding = nn.Embedding(input_dim, emb_dim)
-        self.rnn = nn.GRU(emb_dim, dec_hid_dim, bidirectional = True)
+        self.rnn = nn.GRU(emb_dim, dec_hid_dim, bidirectional=True)
 
-        # self.fc_out = nn.Linear((enc_hid_dim * 2)**2, input_dim)
+        # self.fc_out = nn.Linear(enc_hid_dim * 4, input_dim)
+
         self.fc_out = self.layers = nn.Sequential(
-            nn.Linear(enc_hid_dim * 2, enc_hid_dim * 2),
+            nn.Linear(enc_hid_dim * 4, enc_hid_dim * 4),
             nn.ReLU(),
-            nn.Linear(enc_hid_dim * 2, enc_hid_dim * 2),
+            nn.Linear(enc_hid_dim * 4, enc_hid_dim * 4),
             nn.ReLU(),
-            nn.Linear(enc_hid_dim * 2, input_dim)
+            nn.Linear(enc_hid_dim * 4, input_dim)
         )
 
         self.dropout = nn.Dropout(dropout)
@@ -93,32 +96,31 @@ class Decoder(nn.Module):
 
         outputs, hidden = self.rnn(embedded)
 
-        #embedded = [1, batch size, emb dim]
+        # embedded = [1, batch size, emb dim]
 
         a = self.attention(encoder_hidden, outputs)
 
-        # a = a.unsqueeze(1)
-        weighted = torch.bmm(a.transpose(1,2), outputs)
 
+        a = a.unsqueeze(1)
+        weighted = torch.bmm(a, outputs)
 
-        # weighted = torch.cat((weighted, encoder_outputs[:,-1,:].unsqueeze(1)), dim=-1)
-        weighted = torch.bmm(encoder_outputs[:,-1,:].unsqueeze(1), weighted)
+        weighted = torch.cat((weighted, encoder_outputs[:, -1, :].unsqueeze(1)), dim=-1)
         prediction = self.fc_out(weighted.squeeze())
-        return prediction
+        return prediction, a
+
 
 class Seq2Seq(nn.Module):
     def __init__(self, ctx_encoder, query_decoder, device):
         super().__init__()
-        
+
         self.ctx_encoder = ctx_encoder
         self.query_decoder = query_decoder
         self.device = device
-        
-    def forward(self, src, query, teacher_forcing_ratio = 0.5):
-        encoder_outputs, hidden = self.ctx_encoder(query)
-        predictions = self.query_decoder(src, hidden, encoder_outputs)
-        return F.softmax(predictions, dim = -1)
 
+    def forward(self, src, query, teacher_forcing_ratio=0.5):
+        encoder_outputs, hidden = self.ctx_encoder(query)
+        predictions, a = self.query_decoder(src, hidden, encoder_outputs)
+        return F.softmax(predictions, dim=-1), a
 
 
 def create_model(vocab_size, device):
